@@ -1,0 +1,10 @@
+include README.md
+include LICENSE
+include requirements.txt
+include INSTALL.md
+include CONTRIBUTING.md
+
+recursive-include snax_ia_v3 *.py
+recursive-exclude * __pycache__
+recursive-exclude * *.py[cod]
+recursive-exclude * *.so
