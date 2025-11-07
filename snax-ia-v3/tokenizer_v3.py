@@ -59,30 +59,46 @@ SELECT name, age FROM users WHERE country = 'Brasil';
     
     def _train_tokenizer(self) -> None:
         """Treina o tokenizador usando SentencePiece BPE."""
-        # Criar dados de treino
-        self._create_training_data()
-        
-        # Treinar SentencePiece
-        spm.SentencePieceTrainer.train(
-            input="corpus.txt",
-            model_prefix="tokenizer_v3",
-            vocab_size=self.vocab_size,
-            model_type="bpe",
-            character_coverage=1.0,
-            byte_fallback=True,  # Nunca gera <unk>
-            pad_id=3,           # <pad>
-            unk_id=3,           # <unk>
-            bos_id=0,           # <bos>
-            eos_id=1,           # <eos>
-            pad_piece="<pad>",
-            unk_piece="<unk>",
-            bos_piece="<bos>",
-            eos_piece="<eos>",
-            user_defined_symbols=["<pad>", "<unk>", "<bos>", "<eos>"],
-            normalization_rule_name="nmt_nfkc",  # Normalização Unicode
-            num_threads=os.cpu_count(),
-            train_extremely_large_corpus=False
+        # Se já existir um corpus grande no repositório (por exemplo um
+        # `corpus.txt` fornecido pelo usuário), use-o. Caso contrário,
+        # crie um corpus de exemplo para permitir testes locais.
+        use_existing = os.path.exists("corpus.txt") and os.path.getsize("corpus.txt") > 10_000
+        if not use_existing:
+            self._create_training_data()
+
+        # Se o corpus for muito pequeno, reduzir o vocab_size para evitar erro
+        # "Vocabulary size too high" do SentencePiece.
+        effective_vocab = self.vocab_size
+        try:
+            if os.path.exists("corpus.txt") and os.path.getsize("corpus.txt") < 50_000:
+                # corpus pequeno -> limitar vocabulário
+                effective_vocab = min(self.vocab_size, 1024)
+        except OSError:
+            effective_vocab = min(self.vocab_size, 1024)
+
+        # Treinar SentencePiece usando uma string de argumentos.
+        # Não forçamos IDs numéricos para evitar conflitos internos (ex: pad_id == unk_id).
+        spm_args = (
+            f"--input=corpus.txt "
+            f"--model_prefix=tokenizer_v3 "
+            f"--vocab_size={effective_vocab} "
+            f"--model_type=bpe "
+            f"--character_coverage=1.0 "
+            "--byte_fallback=true "
+            f"--user_defined_symbols=<pad>,<bos>,<eos> "
+            "--normalization_rule_name=nmt_nfkc "
+            f"--num_threads={max(1, os.cpu_count() or 1)}"
         )
+
+        spm.SentencePieceTrainer.train(spm_args)
+
+        # Após treinar, o SentencePiece criará as peças especiais. Vamos carregar
+        # o modelo gerado para garantir que os IDs de special tokens sejam capturados
+        # dinamicamente (evita supor valores fixos para unk/bos/eos/pad).
+        self.sp.load("tokenizer_v3.model")
+        # Atualizar o arquivo model_path com o nome gerado
+        if os.path.exists("tokenizer_v3.model"):
+            os.replace("tokenizer_v3.model", self.model_path)
         
         # Limpar arquivo temporário
         if os.path.exists("corpus.txt"):

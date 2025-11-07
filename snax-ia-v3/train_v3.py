@@ -262,14 +262,29 @@ def main():
     # Carregar ou criar tokenizer
     tokenizer = SnaXTokenizer_v3()
     
-    # Carregar dataset (Wikipedia PT como exemplo)
+    # Carregar dataset (tenta Wikipedia; se falhar, usa um corpus de exemplo)
     print("📚 Carregando dataset...")
-    dataset = load_dataset("wikipedia", "20220301.pt", split="train")
-    
-    # Criar datasets de treino e validação
-    train_size = int(0.95 * len(dataset))
-    train_texts = dataset[:train_size]["text"]
-    val_texts = dataset[train_size:]["text"]
+    try:
+        dataset = load_dataset("wikipedia", "20220301.pt", split="train")
+        train_size = int(0.95 * len(dataset))
+        train_texts = dataset[:train_size]["text"]
+        val_texts = dataset[train_size:]["text"]
+    except Exception as e:
+        print(f"⚠️ Não foi possível carregar dataset externo ({e}). Usando corpus de exemplo pequeno para testes.")
+        sample_texts = [
+            "Python é uma linguagem de programação de alto nível.",
+            "A inteligência artificial está revolucionando o mundo.",
+            "Machine learning models learn from data.",
+            "def hello():\n    print('world')",
+            "Natural language processing é fascinante.",
+            "A capital do Brasil é Brasília.",
+            "2 + 2 = 4",
+        ]
+        # Repetir para criar um conjunto de tamanho razoável para testes locais
+        replicated = sample_texts * 200
+        split = int(0.95 * len(replicated))
+        train_texts = replicated[:split]
+        val_texts = replicated[split:]
     
     train_dataset = TextDataset(train_texts, tokenizer, config["max_length"])
     val_dataset = TextDataset(val_texts, tokenizer, config["max_length"])
